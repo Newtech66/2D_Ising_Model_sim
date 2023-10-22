@@ -7,11 +7,11 @@
 			"command": "C:/MinGW/mingw64/bin/g++.exe",
 			"args": [
 				"-fdiagnostics-color=always",
-				"-g",
 				"${file}",
 				"-o",
 				"${fileDirname}\\${fileBasenameNoExtension}.exe",
-				"-fopenmp"
+				"-fopenmp",
+				"-O2"
 			],
 			"options": {
 				"cwd": "C:/MinGW/mingw64/bin"
