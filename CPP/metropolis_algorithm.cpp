@@ -1,7 +1,9 @@
 #include <iostream>
+#include <iomanip>
 #include <random>
 #include <chrono>
 #include <vector>
+#include <string>
 #include <omp.h>
 
 //For convenience
@@ -113,6 +115,9 @@ int main(){
     std::cout<<"Input number of values to take (including endpoints): ";
     std::cin>>T_count;
 
+    int pwidth = std::to_string(T_count).length();
+    int progress = 0;
+    std::cout << "\nProgress: " << std::setw(pwidth) << progress << '/' << T_count << '\r';
     double start = omp_get_wtime();
 
     //For each value of temperature...
@@ -137,10 +142,16 @@ int main(){
             }
             //snaps[snap] = lattice;
         }
+
+        #pragma omp critical
+        {
+            ++progress;
+            std::cout << "Progress: " << std::setw(pwidth) << progress << '/' << T_count << '\r';
+        }
     }
 
     double end = omp_get_wtime();
-    std::cout << "Time taken = " << end - start <<" s";
+    std::cout << "\nTime taken = " << end - start <<" s";
 
     return 0;
 }
