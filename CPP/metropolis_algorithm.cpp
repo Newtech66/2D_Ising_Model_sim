@@ -4,6 +4,7 @@
 #include <chrono>
 #include <vector>
 #include <string>
+#include <fstream>
 #include <omp.h>
 
 //For convenience
@@ -16,7 +17,9 @@ std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
 //Uniform real distribution
 std::uniform_real_distribution<float> urd(1);
 
+//Monte - Carlo timestep
 void mc_timestep(LatticeType lattice[][40],float vexp[][9],int T_i,int N){
+    //Execute one step for cell
     for(int i = 0;i < N;++i){
         for(int j = 0;j < N;++j){
             LatticeType u = lattice[i][j];
@@ -29,7 +32,7 @@ void mc_timestep(LatticeType lattice[][40],float vexp[][9],int T_i,int N){
 
 int main(){
     //This is a C++ program that implements a naive implementation of the Metropolis algorithm.
-    //I'm making this to test how much faster C++ is than Python
+    //I'm making this to test how much faster C++ is than Python.
     //Conclusion: Much faster. I've also used OpenMP to parallelize this.
     //Compiled with flags -fopenmp and -O2.
 
@@ -54,12 +57,12 @@ int main(){
     std::cout<<"Input number of values to take (including endpoints): ";
     std::cin>>T_count;
 
+    //Set up progress printing
     int pwidth = std::to_string(T_count).length();
     int progress = 0;
     std::cout << "\nProgress: " << std::setw(pwidth) << progress << '/' << T_count;
-    double start = omp_get_wtime();
 
-    //Create lattice
+    //Create lattices
     LatticeType lattices[T_count][40][40];
     for(int k = 0;k < T_count;++k){
         for(int i = 0;i < N;++i){
@@ -80,6 +83,25 @@ int main(){
         }
     }
 
+    //Create output file
+    std::string filename = "data_" + std::to_string(N) + ".dat";
+    std::fstream fout(filename, std::ios_base::out | std::ios_base::binary);
+    if(!fout.is_open()){
+        std::cout << "Failed to create data file!" << std::endl;
+        return 0;
+    }
+    //Write list of parameters
+    fout.write(reinterpret_cast<const char*>(&N),sizeof(int));
+    fout.write(reinterpret_cast<const char*>(&t_equilibrium),sizeof(int));
+    fout.write(reinterpret_cast<const char*>(&snapshot_interval),sizeof(int));
+    fout.write(reinterpret_cast<const char*>(&snapshot_count),sizeof(int));
+    fout.write(reinterpret_cast<const char*>(&T_min),sizeof(float));
+    fout.write(reinterpret_cast<const char*>(&T_max),sizeof(float));
+    fout.write(reinterpret_cast<const char*>(&T_count),sizeof(int));
+
+    //Start timing
+    double start = omp_get_wtime();
+
     //For each value of temperature...
     #pragma omp parallel for
     for(int T_i = 0;T_i < T_count;++T_i){
@@ -92,12 +114,22 @@ int main(){
         }
 
         //Start taking snapshots
-        //GridList snaps(snapshot_count);
         for(int snap = 0;snap < snapshot_count;snap++){
             for(int t_i = 0;t_i < snapshot_interval;++t_i){
                 mc_timestep(lattices[T_i], vexp, T_i, N);
             }
-            //snaps[snap] = lattice;
+            //Write snapshot to file
+            #pragma omp critical
+            {
+                //Write temperature index
+                fout.write(reinterpret_cast<const char*>(&T_i),sizeof(int));
+                //Write lattice in row-major order
+                for(int i = 0;i < N;++i){
+                    for(int j = 0;j < N;++j){
+                        fout.write(reinterpret_cast<const char*>(&lattices[T_i][i][j]),sizeof(LatticeType));
+                    }
+                }
+            }
         }
 
         #pragma omp critical
@@ -107,8 +139,17 @@ int main(){
         }
     }
 
+    //Close output file
+    fout.close();
+
+    //End timing and print time taken
     double end = omp_get_wtime();
-    std::cout << "\nTime taken = " << end - start <<" s";
+    const std::chrono::duration<double> time_taken{end - start};
+    const auto hrs = std::chrono::duration_cast<std::chrono::hours>(time_taken);
+    const auto mins = std::chrono::duration_cast<std::chrono::hours>(time_taken - hrs);
+    const auto secs = std::chrono::duration_cast<std::chrono::seconds>(time_taken - hrs - mins);
+    const auto millisecs = std::chrono::duration_cast<std::chrono::milliseconds>(time_taken - hrs - mins - secs);
+    std::cout << "\nTime taken = " << hrs.count() << "h " << mins.count() << "m " << secs.count() << "s " << millisecs.count() << "ms";
 
     return 0;
 }
