@@ -78,6 +78,10 @@ int main(){
         }
     }
 
+    //Calculate quotient and remainder of N by 8, needed later while writing file
+    int qN8 = N / 8;
+    int rN8 = N % 8;
+
     //Precalculate exponentials...because exp is VERY expensive!
     //This achieved a speedup from ~20s to ~5s (!!) for N = 16
     //and t_eq = 10^5 and T = [0.1,4] in steps of 0.1
@@ -133,10 +137,24 @@ int main(){
                 {
                     //Write temperature index
                     fout.write(reinterpret_cast<const char*>(&T_i),sizeof(int));
-                    //Write lattice in row-major order
+                    //Write lattice by mapping bools to blocks of 8 (1 byte = 8 bits)
                     for(int i = 0;i < N;++i){
-                        for(int j = 0;j < N;++j){
-                            fout.write(reinterpret_cast<const char*>(&lattices[T_i][i][j]),sizeof(LatticeType));
+                        for(int j = 0;j < qN8;j += 8){
+                            int num = (1 << 8) - 1;
+                            for(int k = 0;k < 8;++k){
+                                num += lattices[T_i][i][8 * j + k] << k;
+                            }
+                            char sto = num / 2;
+                            fout.write(reinterpret_cast<const char*>(&sto),sizeof(sto));
+                        }
+                        //Possible remainder block
+                        if(rN8 > 0){
+                            int num = (1 << rN8) - 1;
+                            for(int k = 0;k < rN8;++k){
+                                num += lattices[T_i][i][8 * qN8 + k] << k;
+                            }
+                            char sto = num / 2;
+                            fout.write(reinterpret_cast<const char*>(&sto),sizeof(sto));
                         }
                     }
                 }
