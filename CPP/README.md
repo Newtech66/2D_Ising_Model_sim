@@ -1,0 +1,1 @@
+Compiled using GCC 11.2 with flags ```-fopenmp``` and ```-O2```. WARNING: Data file generated may be very large.

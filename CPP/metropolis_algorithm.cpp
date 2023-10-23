@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <cctype>
 #include <omp.h>
 
 //For convenience
@@ -38,24 +39,29 @@ int main(){
 
     //Input data (part 1)
     int N, t_equilibrium, snapshot_interval, snapshot_count;
-    std::cout<<"Input size of lattice (N): ";
-    std::cin>>N;
-    std::cout<<"Input equilibriation time: ";
-    std::cin>>t_equilibrium;
-    std::cout<<"Input autocorrelation time: ";
-    std::cin>>snapshot_interval;
-    std::cout<<"Input number of snapshots to take: ";
-    std::cin>>snapshot_count;
+    std::cout << "Input size of lattice (N): ";
+    std::cin >> N;
+    std::cout << "Input equilibriation time: ";
+    std::cin >> t_equilibrium;
+    std::cout << "Input autocorrelation time: ";
+    std::cin >> snapshot_interval;
+    std::cout << "Input number of snapshots to take: ";
+    std::cin >> snapshot_count;
 
     //Input data (part 2)
     float T_min, T_max;
     int T_count;
-    std::cout<<"Input minimum value of temperature: ";
-    std::cin>>T_min;
-    std::cout<<"Input maximum value of temperature: ";
-    std::cin>>T_max;
-    std::cout<<"Input number of values to take (including endpoints): ";
-    std::cin>>T_count;
+    std::cout << "Input minimum value of temperature: ";
+    std::cin >> T_min;
+    std::cout << "Input maximum value of temperature: ";
+    std::cin >> T_max;
+    std::cout << "Input number of values to take (including endpoints): ";
+    std::cin >> T_count;
+
+    //Input data (part 3)
+    char create_file;
+    std::cout << "Create data file? (y/n): ";
+    std::cin >> create_file;
 
     //Set up progress printing
     int pwidth = std::to_string(T_count).length();
@@ -83,21 +89,24 @@ int main(){
         }
     }
 
-    //Create output file
-    std::string filename = "data_" + std::to_string(N) + ".dat";
-    std::fstream fout(filename, std::ios_base::out | std::ios_base::binary);
-    if(!fout.is_open()){
-        std::cout << "Failed to create data file!" << std::endl;
-        return 0;
+    std::fstream fout;
+    if(create_file == 'y'){
+        //Create output file
+        std::string filename = "data_" + std::to_string(N) + ".dat";
+        fout.open(filename, std::ios_base::out | std::ios_base::binary);
+        if(!fout.is_open()){
+            std::cout << "Failed to create data file!" << std::endl;
+            return 0;
+        }
+        //Write list of parameters
+        fout.write(reinterpret_cast<const char*>(&N),sizeof(int));
+        fout.write(reinterpret_cast<const char*>(&t_equilibrium),sizeof(int));
+        fout.write(reinterpret_cast<const char*>(&snapshot_interval),sizeof(int));
+        fout.write(reinterpret_cast<const char*>(&snapshot_count),sizeof(int));
+        fout.write(reinterpret_cast<const char*>(&T_min),sizeof(float));
+        fout.write(reinterpret_cast<const char*>(&T_max),sizeof(float));
+        fout.write(reinterpret_cast<const char*>(&T_count),sizeof(int));
     }
-    //Write list of parameters
-    fout.write(reinterpret_cast<const char*>(&N),sizeof(int));
-    fout.write(reinterpret_cast<const char*>(&t_equilibrium),sizeof(int));
-    fout.write(reinterpret_cast<const char*>(&snapshot_interval),sizeof(int));
-    fout.write(reinterpret_cast<const char*>(&snapshot_count),sizeof(int));
-    fout.write(reinterpret_cast<const char*>(&T_min),sizeof(float));
-    fout.write(reinterpret_cast<const char*>(&T_max),sizeof(float));
-    fout.write(reinterpret_cast<const char*>(&T_count),sizeof(int));
 
     //Start timing
     double start = omp_get_wtime();
@@ -118,15 +127,17 @@ int main(){
             for(int t_i = 0;t_i < snapshot_interval;++t_i){
                 mc_timestep(lattices[T_i], vexp, T_i, N);
             }
-            //Write snapshot to file
-            #pragma omp critical
-            {
-                //Write temperature index
-                fout.write(reinterpret_cast<const char*>(&T_i),sizeof(int));
-                //Write lattice in row-major order
-                for(int i = 0;i < N;++i){
-                    for(int j = 0;j < N;++j){
-                        fout.write(reinterpret_cast<const char*>(&lattices[T_i][i][j]),sizeof(LatticeType));
+            if(create_file == 'y'){
+                //Write snapshot to file
+                #pragma omp critical
+                {
+                    //Write temperature index
+                    fout.write(reinterpret_cast<const char*>(&T_i),sizeof(int));
+                    //Write lattice in row-major order
+                    for(int i = 0;i < N;++i){
+                        for(int j = 0;j < N;++j){
+                            fout.write(reinterpret_cast<const char*>(&lattices[T_i][i][j]),sizeof(LatticeType));
+                        }
                     }
                 }
             }
@@ -139,8 +150,10 @@ int main(){
         }
     }
 
-    //Close output file
-    fout.close();
+    if(create_file == 'y'){
+        //Close output file
+        fout.close();
+    }
 
     //End timing and print time taken
     double end = omp_get_wtime();
