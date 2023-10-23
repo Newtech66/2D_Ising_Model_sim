@@ -14,77 +14,16 @@ using GridList = std::vector<Grid>;
 //Mersenne Twister engine seeded using system time
 std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
 //Uniform real distribution
-std::exponential_distribution<float> urd(1);
+std::uniform_real_distribution<float> urd(1);
 
-void mc_timestep_slow(Grid& lattice,float T,int N){
+void mc_timestep(LatticeType lattice[][40],float vexp[][9],int T_i,int N){
     for(int i = 0;i < N;++i){
         for(int j = 0;j < N;++j){
-            int delE = lattice[i][j] * (lattice[(i-1+N)%N][j] + lattice[(i+1)%N][j] + lattice[i][(j-1+1)%N] + lattice[i][(j+1)%N]);
-            lattice[i][j] *= 1 - 2 * std::signbit(T * urd(rng) - delE);
+            LatticeType u = lattice[i][j];
+            LatticeType s = lattice[(i-1+N)%N][j] + lattice[(i+1)%N][j] + lattice[i][(i+1)%N] + lattice[i][(j-1+N)%N];
+            float accept = urd(rng) - vexp[T_i][u * s + 4];
+            lattice[i][j] = std::copysign(u,accept);
         }
-    }
-}
-
-void mc_timestep(Grid& lattice,float T,int N){
-    //Compute a step for each cell
-    //I am doing this in several parts to get rid of modulo operations
-    //for imposing periodic boundary conditions. Modulo operations are
-    //slow so I expect some improvement...
-
-    //interior
-    for(int i = 1;i < N - 1;++i){
-        for(int j = 1;j < N - 1;++j){
-            int delE = lattice[i][j] * (lattice[i-1][j] + lattice[i+1][j] + lattice[i][j-1] + lattice[i][j+1]);
-            lattice[i][j] *= 1 - 2 * std::signbit(T * urd(rng) - delE);
-        }
-    }
-    
-    //top edge
-    for(int i = 1;i < N - 1;++i){
-        int delE = lattice[0][i] * (lattice[N-1][i] + lattice[1][i] + lattice[0][i-1] + lattice[0][i+1]);
-        lattice[0][i] *= 1 - 2 * std::signbit(T * urd(rng) - delE);
-    }
-
-    //bottom edge
-    for(int i = 1;i < N - 1;++i){
-        int delE = lattice[N-1][i] * (lattice[N-2][i] + lattice[0][i] + lattice[N-1][i-1] + lattice[N-1][i+1]);
-        lattice[N-1][i] *= 1 - 2 * std::signbit(T * urd(rng) - delE);
-    }
-
-    //left edge
-    for(int i = 1;i < N - 1;++i){
-        int delE = lattice[i][0] * (lattice[i][N-1] + lattice[i][1] + lattice[i-1][0] + lattice[i+1][0]);
-        lattice[i][0] *= 1 - 2 * std::signbit(T * urd(rng) - delE);
-    }
-
-    //right edge
-    for(int i = 1;i < N - 1;++i){
-        int delE = lattice[i][N-1] * (lattice[i][N-2] + lattice[i][0] + lattice[i-1][N-1] + lattice[i+1][N-1]);
-        lattice[i][N-1] *= 1 - 2 * std::signbit(T * urd(rng) - delE);
-    }
-
-    //top left corner
-    {
-        int delE = lattice[0][0] * (lattice[N-1][0] + lattice[1][0] + lattice[0][N-1] + lattice[0][1]);
-        lattice[0][0] *= 1 - 2 * std::signbit(T * urd(rng) - delE);
-    }
-
-    //top right corner
-    {
-        int delE = lattice[0][N-1] * (lattice[N-1][N-1] + lattice[1][N-1] + lattice[0][N-2] + lattice[0][0]);
-        lattice[0][N-1] *= 1 - 2 * std::signbit(T * urd(rng) - delE);
-    }
-
-    //bottom left corner
-    {
-        int delE = lattice[N-1][0] * (lattice[N-2][0] + lattice[0][0] + lattice[N-1][N-1] + lattice[N-1][1]);
-        lattice[N-1][0] *= 1 - 2 * std::signbit(T * urd(rng) - delE);
-    }
-
-    //bottom right corner
-    {
-        int delE = lattice[N-1][N-1] * (lattice[N-2][N-1] + lattice[0][N-1] + lattice[N-1][N-2] + lattice[N-1][0]);
-        lattice[N-1][N-1] *= 1 - 2 * std::signbit(T * urd(rng) - delE);
     }
 }
 
@@ -117,8 +56,29 @@ int main(){
 
     int pwidth = std::to_string(T_count).length();
     int progress = 0;
-    std::cout << "\nProgress: " << std::setw(pwidth) << progress << '/' << T_count << '\r';
+    std::cout << "\nProgress: " << std::setw(pwidth) << progress << '/' << T_count;
     double start = omp_get_wtime();
+
+    //Create lattice
+    LatticeType lattices[T_count][40][40];
+    for(int k = 0;k < T_count;++k){
+        for(int i = 0;i < N;++i){
+            for(int j = 0;j < N;++j){
+                lattices[k][i][j] = 1;
+            }
+        }
+    }
+
+    //Precalculate exponentials...because exp is VERY expensive!
+    //This achieved a speedup from ~20s to ~5s (!!) for N = 16
+    //and t_eq = 10^5 and T = [0.1,4] in steps of 0.1
+    float vexp[T_count][9];
+    for(int T_i = 0;T_i < T_count;++T_i){
+        for(int j = -4;j <= 4;++j){
+            float cur_T = T_min + T_i * (T_max - T_min) / (T_count - 1);
+            vexp[T_i][j + 4] = std::exp(j / cur_T);
+        }
+    }
 
     //For each value of temperature...
     #pragma omp parallel for
@@ -126,19 +86,16 @@ int main(){
         //Calculate current temperature
         float cur_T = T_min + T_i * (T_max - T_min) / (T_count - 1);
         
-        //Create lattice
-        Grid lattice(N,std::vector<LatticeType>(N,1));
-
         //Allow lattice to equilibriate
         for(int t_i = 0;t_i < t_equilibrium;++t_i){
-            mc_timestep_slow(lattice, cur_T, N);
+            mc_timestep(lattices[T_i], vexp, T_i, N);
         }
 
         //Start taking snapshots
         //GridList snaps(snapshot_count);
         for(int snap = 0;snap < snapshot_count;snap++){
             for(int t_i = 0;t_i < snapshot_interval;++t_i){
-                mc_timestep_slow(lattice, cur_T, N);
+                mc_timestep(lattices[T_i], vexp, T_i, N);
             }
             //snaps[snap] = lattice;
         }
@@ -146,7 +103,7 @@ int main(){
         #pragma omp critical
         {
             ++progress;
-            std::cout << "Progress: " << std::setw(pwidth) << progress << '/' << T_count << '\r';
+            std::cout << "\rProgress: " << std::setw(pwidth) << progress << '/' << T_count;
         }
     }
 
