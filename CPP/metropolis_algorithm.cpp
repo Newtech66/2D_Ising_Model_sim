@@ -5,12 +5,12 @@
 #include <vector>
 #include <string>
 #include <fstream>
-#include <cctype>
 #include <omp.h>
 
 //For convenience
 using LatticeType = int;
-using Grid = std::vector<std::vector<LatticeType>>;
+using Row = std::vector<LatticeType>;
+using Grid = std::vector<Row>;
 using GridList = std::vector<Grid>;
 
 //Mersenne Twister engine seeded using system time
@@ -19,7 +19,7 @@ std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
 std::uniform_real_distribution<float> urd(1);
 
 //Monte - Carlo timestep
-void mc_timestep(LatticeType lattice[][40],float vexp[][9],int T_i,int N){
+void mc_timestep(Grid& lattice,float vexp[][9],int T_i,int N){
     //Execute one step for cell
     for(int i = 0;i < N;++i){
         for(int j = 0;j < N;++j){
@@ -69,14 +69,7 @@ int main(){
     std::cout << "\nProgress: " << std::setw(pwidth) << progress << '/' << T_count;
 
     //Create lattices
-    LatticeType lattices[T_count][40][40];
-    for(int k = 0;k < T_count;++k){
-        for(int i = 0;i < N;++i){
-            for(int j = 0;j < N;++j){
-                lattices[k][i][j] = 1;
-            }
-        }
-    }
+    GridList lattices(T_count,Grid(N,Row(N,1)));
 
     //Calculate quotient and remainder of N by 8, needed later while writing file
     int qN8 = N / 8;
@@ -177,7 +170,7 @@ int main(){
     double end = omp_get_wtime();
     const std::chrono::duration<double> time_taken{end - start};
     const auto hrs = std::chrono::duration_cast<std::chrono::hours>(time_taken);
-    const auto mins = std::chrono::duration_cast<std::chrono::hours>(time_taken - hrs);
+    const auto mins = std::chrono::duration_cast<std::chrono::minutes>(time_taken - hrs);
     const auto secs = std::chrono::duration_cast<std::chrono::seconds>(time_taken - hrs - mins);
     const auto millisecs = std::chrono::duration_cast<std::chrono::milliseconds>(time_taken - hrs - mins - secs);
     std::cout << "\nTime taken = " << hrs.count() << "h " << mins.count() << "m " << secs.count() << "s " << millisecs.count() << "ms";
