@@ -13,20 +13,19 @@ using Row = std::vector<LatticeType>;
 using Grid = std::vector<Row>;
 using GridList = std::vector<Grid>;
 
-//Mersenne Twister engine seeded using system time
-std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+
 //Uniform real distribution
-std::uniform_real_distribution<float> urd(1);
+std::uniform_real_distribution<float> urd(0.0,1.0);
 
 //Monte - Carlo timestep
-void mc_timestep(Grid& lattice,float vexp[][9],int T_i,int N){
+void mc_timestep(Grid& lattice,float vexp[][9],int T_i,int N, std::mt19937& rng){
     //Execute one step for cell
     for(int i = 0;i < N;++i){
         for(int j = 0;j < N;++j){
-            LatticeType u = lattice[i][j];
-            LatticeType s = lattice[(i-1+N)%N][j] + lattice[(i+1)%N][j] + lattice[i][(i+1)%N] + lattice[i][(j-1+N)%N];
+            LatticeType u = -lattice[i][j];
+            LatticeType s = lattice[(i-1+N)%N][j] + lattice[(i+1)%N][j] + lattice[i][(j+1)%N] + lattice[i][(j-1+N)%N];
             float accept = urd(rng) - vexp[T_i][u * s + 4];
-            lattice[i][j] = std::copysign(u,accept);
+            lattice[i][j] *= 1 - 2 * std::signbit(accept);
         }
     }
 }
@@ -80,17 +79,21 @@ int main(){
     //and t_eq = 10^5 and T = [0.1,4] in steps of 0.1
     float vexp[T_count][9];
     for(int T_i = 0;T_i < T_count;++T_i){
-        for(int j = -4;j <= 4;++j){
-            float cur_T = T_min + T_i * (T_max - T_min) / (T_count - 1);
+        float cur_T = T_min + T_i * (T_max - T_min) / (T_count - 1);
+        
+        for(int j = -4;j < 0;++j){
             vexp[T_i][j + 4] = std::exp(j / cur_T);
+        }
+        for(int j = 0;j <= 4;++j){
+            vexp[T_i][j + 4] = 1.0;
         }
     }
 
-    std::fstream fout;
+    std::ofstream fout;
     if(create_file == 'y'){
         //Create output file
         std::string filename = "data_" + std::to_string(N) + ".dat";
-        fout.open(filename, std::ios_base::out | std::ios_base::binary);
+        fout.open(filename, std::ios_base::binary);
         if(!fout.is_open()){
             std::cout << "Failed to create data file!" << std::endl;
             return 0;
@@ -111,18 +114,21 @@ int main(){
     //For each value of temperature...
     #pragma omp parallel for
     for(int T_i = 0;T_i < T_count;++T_i){
+        //Mersenne Twister engine seeded using system time
+        std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+        // std::mt19937 rng(std::random_device());
         //Calculate current temperature
         float cur_T = T_min + T_i * (T_max - T_min) / (T_count - 1);
         
         //Allow lattice to equilibriate
         for(int t_i = 0;t_i < t_equilibrium;++t_i){
-            mc_timestep(lattices[T_i], vexp, T_i, N);
+            mc_timestep(lattices[T_i], vexp, T_i, N, rng);
         }
 
         //Start taking snapshots
         for(int snap = 0;snap < snapshot_count;snap++){
             for(int t_i = 0;t_i < snapshot_interval;++t_i){
-                mc_timestep(lattices[T_i], vexp, T_i, N);
+                mc_timestep(lattices[T_i], vexp, T_i, N, rng);
             }
             if(create_file == 'y'){
                 //Write snapshot to file
@@ -132,21 +138,19 @@ int main(){
                     fout.write(reinterpret_cast<const char*>(&T_i),sizeof(int));
                     //Write lattice by mapping bools to blocks of 8 (1 byte = 8 bits)
                     for(int i = 0;i < N;++i){
-                        for(int j = 0;j < qN8;j += 8){
-                            int num = (1 << 8) - 1;
+                        for(int j = 0;j < qN8;++j){
+                            unsigned char sto = 0;
                             for(int k = 0;k < 8;++k){
-                                num += lattices[T_i][i][8 * j + k] << k;
+                                sto |= ((lattices[T_i][i][8 * j + k] + 1) >> 1) << k;
                             }
-                            char sto = num / 2;
                             fout.write(reinterpret_cast<const char*>(&sto),sizeof(sto));
                         }
                         //Possible remainder block
                         if(rN8 > 0){
-                            int num = (1 << rN8) - 1;
+                            unsigned char sto = 0;
                             for(int k = 0;k < rN8;++k){
-                                num += lattices[T_i][i][8 * qN8 + k] << k;
+                                sto |= ((lattices[T_i][i][8 * qN8 + k] + 1) >> 1) << k;
                             }
-                            char sto = num / 2;
                             fout.write(reinterpret_cast<const char*>(&sto),sizeof(sto));
                         }
                     }
