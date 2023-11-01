@@ -10,26 +10,32 @@ void analyze(const char* filename){
         std::cout << "Failed to open " << std::string(filename) << '\n';
         return;
     }
-    std::cout << "Calculating magnetization for " << std::string(filename) << "..." << std::endl;
+    std::cout << "Calculating specfic heat for " << std::string(filename) << "..." << std::endl;
     Params p = read_params(fin);
-    std::map<int,double> magnetisation;
+    std::map<int,double> tot, sq_tot;
     for(int s_i = 0;s_i < p.n_s * p.n_T;++s_i){
         auto [T_i,lattice] = read_next(p.N, fin);
         double cur_T = p.T_min + T_i * (p.T_max - p.T_min) / (p.n_T - 1);
         double sum = 0.0;
         for(int i = 0;i < p.N;++i){
             for(int j = 0;j < p.N;++j){
-                sum += lattice[i][j];
+                //Only take left and up to avoid double counting
+                sum += lattice[i][j] * (lattice[(i-1+p.N)%p.N][j] + lattice[i][(j-1+p.N)%p.N]);
             }
         }
-        sum /= (p.N * p.N);
-        magnetisation[T_i] += std::abs(sum);
+        sum *= -1;
+        tot[T_i] += sum;
+        sq_tot[T_i] += sum * sum;
     }
     fin.close();
-    std::cout << "Calculated magnetization data for " << std::string(filename) << ": " << std::endl;
-    for(auto [T_i,m]:magnetisation){
-        float cur_T = p.T_min + T_i * (p.T_max - p.T_min) / (p.n_T - 1);
-        std::cout << cur_T << ' ' << m / p.n_s << '\n';
+    std::cout << "Calculated specific heat data for " << std::string(filename) << ": " << std::endl;
+    for(auto& [T_i,S]:tot)  S /= p.n_s;
+    for(auto& [T_i,S]:sq_tot)  S /= p.n_s;
+    for(auto [T_i,S1]:sq_tot){
+        double cur_T = p.T_min + T_i * (p.T_max - p.T_min) / (p.n_T - 1);
+        double S2 = tot[T_i];
+        double Cv = (S1 - S2 * S2) / (2 * cur_T * cur_T);   //We defined k = 2 initially
+        std::cout << cur_T << ' ' << Cv / (p.N * p.N) << '\n';
     }
 }
 
