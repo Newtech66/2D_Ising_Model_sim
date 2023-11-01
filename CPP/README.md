@@ -1,4 +1,4 @@
-Compiled using GCC 11.2 with flags ```-fopenmp``` and ```-O2```. To run the simulation, simply run ```metropolis_algorithm.exe```.
+Compiled using GCC 11.2 with flags ```-fopenmp``` and ```-O3```. To run the simulation, simply run ```metropolis_algorithm.exe```.
 
 WARNING: Data file generated may be very large.
 
@@ -24,6 +24,13 @@ Analysis:
 
 I have written a data reader interface so that one doesn't have to re-implement the data decoding process. There are two functions ```read_start``` and ```read_next```. First you open the file you want to read and pass it to ```read_start``` which returns a ```Params``` struct containing  the simulation parameters. Next, you can loop $n_s \cdot n_T$ times and each time you call ```read_next``` which returns a pair of $i$ and the corresponding decoded lattice. Now you can process the data as you like.
 
-A simple data checker program is provided that takes the data file name as a command-line argument and prints a summary of the contents of the data file.
+A simple data checker program is provided that takes a list of data file names as command-line arguments and prints a summary of the contents of each of the data files.
 
-An example analysis program which finds the spontaneous magnetisation per unit spin is also provided. C++ does not have a plotting library, so what one could do is write the data to a portable format like CSV and then use Python to do the analysis.
+I have written programs for finding:
+
+- Spontaneous magnetisation per unit spin
+- Susceptibility per unit spin
+- Energy per unit spin
+- Specific heat per unit spin
+
+To use the programs, just pass the names of the data files to be analysed as command-line arguments. C++ does not have a plotting library, so what one could do is write the data to a portable format like CSV and then use Python to do the analysis. For now, the programs just output the values to the console.

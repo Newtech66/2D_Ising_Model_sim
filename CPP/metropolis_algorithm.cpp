@@ -62,6 +62,7 @@ int main(){
     std::cout << "Create data file? (y/n): ";
     std::cin >> create_file;
 
+
     //Set up progress printing
     int pwidth = std::to_string(T_count).length();
     int progress = 0;
@@ -92,7 +93,10 @@ int main(){
     std::ofstream fout;
     if(create_file == 'y'){
         //Create output file
-        std::string filename = "data_" + std::to_string(N) + ".dat";
+        std::string filename_noext;
+        std::cout << "Name of file to create (without .dat extension): ";
+        std::cin >> filename_noext;
+        std::string filename = filename_noext + ".dat";
         fout.open(filename, std::ios_base::binary);
         if(!fout.is_open()){
             std::cout << "Failed to create data file!" << std::endl;

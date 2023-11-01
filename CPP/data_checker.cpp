@@ -32,7 +32,7 @@ int main(int argc,char* argv[]){
     if(argc == 1){
         std::cout << "No arguments were passed. Please pass one or more filenames to analyze.";
         return 0;
-    }else if(argc > 2){
+    }else{
         for(int argi = 1;argi < argc;++argi){
             analyze(argv[argi]);
         }
