@@ -6,13 +6,8 @@
 #include <string>
 #include <fstream>
 #include <omp.h>
-
-//For convenience
-using LatticeType = int;
-using Row = std::vector<LatticeType>;
-using Grid = std::vector<Row>;
-using GridList = std::vector<Grid>;
-
+#include "common_defs.h"
+#include "writer.h"
 
 //Uniform real distribution
 std::uniform_real_distribution<float> urd(0.0,1.0);
@@ -34,53 +29,46 @@ int main(){
     //This is a C++ program that implements a naive implementation of the Metropolis algorithm.
     //I'm making this to test how much faster C++ is than Python.
     //Conclusion: Much faster. I've also used OpenMP to parallelize this.
-    //Compiled with flags -fopenmp and -O2.
 
+    Params sim_params;
     //Input data (part 1)
     int N, t_equilibrium, snapshot_interval, snapshot_count;
     std::cout << "Input size of lattice (N): ";
-    std::cin >> N;
+    std::cin >> sim_params.N;
     std::cout << "Input equilibriation time: ";
-    std::cin >> t_equilibrium;
+    std::cin >> sim_params.t_eq;
     std::cout << "Input autocorrelation time: ";
-    std::cin >> snapshot_interval;
+    std::cin >> sim_params.t_a;
     std::cout << "Input number of snapshots to take: ";
-    std::cin >> snapshot_count;
+    std::cin >> sim_params.n_s;
 
     //Input data (part 2)
-    float T_min, T_max;
-    int T_count;
     std::cout << "Input minimum value of temperature: ";
-    std::cin >> T_min;
+    std::cin >> sim_params.T_min;
     std::cout << "Input maximum value of temperature: ";
-    std::cin >> T_max;
+    std::cin >> sim_params.T_max;
     std::cout << "Input number of values to take (including endpoints): ";
-    std::cin >> T_count;
+    std::cin >> sim_params.n_T;
 
     //Input data (part 3)
     char create_file;
     std::cout << "Create data file? (y/n): ";
     std::cin >> create_file;
 
-
     //Set up progress printing
-    int pwidth = std::to_string(T_count).length();
+    int pwidth = std::to_string(sim_params.n_T).length();
     int progress = 0;
-    std::cout << "\nProgress: " << std::setw(pwidth) << progress << '/' << T_count;
+    std::cout << "\nProgress: " << std::setw(pwidth) << progress << '/' << sim_params.n_T;
 
     //Create lattices
-    GridList lattices(T_count,Grid(N,Row(N,1)));
-
-    //Calculate quotient and remainder of N by 8, needed later while writing file
-    int qN8 = N / 8;
-    int rN8 = N % 8;
+    GridList lattices(sim_params.n_T,Grid(sim_params.N,Row(sim_params.N,1)));
 
     //Precalculate exponentials...because exp is VERY expensive!
     //This achieved a speedup from ~20s to ~5s (!!) for N = 16
     //and t_eq = 10^5 and T = [0.1,4] in steps of 0.1
-    float vexp[T_count][9];
-    for(int T_i = 0;T_i < T_count;++T_i){
-        float cur_T = T_min + T_i * (T_max - T_min) / (T_count - 1);
+    float vexp[sim_params.n_T][9];
+    for(int T_i = 0;T_i < sim_params.n_T;++T_i){
+        float cur_T = sim_params.T_min + T_i * (sim_params.T_max - sim_params.T_min) / (sim_params.n_T - 1);
         
         for(int j = -4;j < 0;++j){
             vexp[T_i][j + 4] = std::exp(j / cur_T);
@@ -98,18 +86,7 @@ int main(){
         std::cin >> filename_noext;
         std::string filename = filename_noext + ".dat";
         fout.open(filename, std::ios_base::binary);
-        if(!fout.is_open()){
-            std::cout << "Failed to create data file!" << std::endl;
-            return 0;
-        }
-        //Write list of parameters
-        fout.write(reinterpret_cast<const char*>(&N),sizeof(int));
-        fout.write(reinterpret_cast<const char*>(&t_equilibrium),sizeof(int));
-        fout.write(reinterpret_cast<const char*>(&snapshot_interval),sizeof(int));
-        fout.write(reinterpret_cast<const char*>(&snapshot_count),sizeof(int));
-        fout.write(reinterpret_cast<const char*>(&T_min),sizeof(float));
-        fout.write(reinterpret_cast<const char*>(&T_max),sizeof(float));
-        fout.write(reinterpret_cast<const char*>(&T_count),sizeof(int));
+        write_params(sim_params, fout);
     }
 
     //Start timing
@@ -117,12 +94,12 @@ int main(){
 
     //For each value of temperature...
     #pragma omp parallel for
-    for(int T_i = 0;T_i < T_count;++T_i){
+    for(int T_i = 0;T_i < sim_params.n_T;++T_i){
         //Mersenne Twister engine seeded using system time
         std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
         // std::mt19937 rng(std::random_device());
         //Calculate current temperature
-        float cur_T = T_min + T_i * (T_max - T_min) / (T_count - 1);
+        float cur_T = sim_params.T_min + T_i * (sim_params.T_max - sim_params.T_min) / (sim_params.n_T - 1);
         
         //Allow lattice to equilibriate
         for(int t_i = 0;t_i < t_equilibrium;++t_i){
@@ -137,35 +114,15 @@ int main(){
             if(create_file == 'y'){
                 //Write snapshot to file
                 #pragma omp critical
-                {
-                    //Write temperature index
-                    fout.write(reinterpret_cast<const char*>(&T_i),sizeof(int));
-                    //Write lattice by mapping bools to blocks of 8 (1 byte = 8 bits)
-                    for(int i = 0;i < N;++i){
-                        for(int j = 0;j < qN8;++j){
-                            unsigned char sto = 0;
-                            for(int k = 0;k < 8;++k){
-                                sto |= ((lattices[T_i][i][8 * j + k] + 1) >> 1) << k;
-                            }
-                            fout.write(reinterpret_cast<const char*>(&sto),sizeof(sto));
-                        }
-                        //Possible remainder block
-                        if(rN8 > 0){
-                            unsigned char sto = 0;
-                            for(int k = 0;k < rN8;++k){
-                                sto |= ((lattices[T_i][i][8 * qN8 + k] + 1) >> 1) << k;
-                            }
-                            fout.write(reinterpret_cast<const char*>(&sto),sizeof(sto));
-                        }
-                    }
-                }
+                write_next(T_i, sim_params.N, lattices[T_i], fout);
             }
         }
 
+        //Update progress
         #pragma omp critical
         {
             ++progress;
-            std::cout << "\rProgress: " << std::setw(pwidth) << progress << '/' << T_count;
+            std::cout << "\rProgress: " << std::setw(pwidth) << progress << '/' << sim_params.n_T;
         }
     }
 

@@ -21,7 +21,7 @@ Params read_params(std::ifstream& fin){
     return p;
 }
 
-std::pair<int,std::vector<std::vector<int>>> read_next(const int N, std::ifstream& fin){
+std::pair<int,Grid> read_next(const int N, std::ifstream& fin){
     /*
     *Read (i, lattice) from input file.
     *Input: Lattice size N, ifstream to opened input file.
@@ -30,14 +30,14 @@ std::pair<int,std::vector<std::vector<int>>> read_next(const int N, std::ifstrea
         std::cout << "File is not open!";
         exit(1);
     }
-    std::pair<int,std::vector<std::vector<int>>> snapshot;
+    std::pair<int,Grid> snapshot;
     //read temp value index i
     int T_i;
     fin.read(reinterpret_cast<char*>(&T_i),sizeof(T_i));
     //read snapshot
     int qN8 = N / 8;
     int rN8 = N % 8;
-    std::vector<std::vector<int>> lattice(N,std::vector<int>(N));
+    Grid lattice(N,Row(N));
     for(int i = 0;i < N;++i){
         for(int j = 0;j < qN8;++j){
             unsigned char sto;
