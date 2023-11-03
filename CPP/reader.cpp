@@ -30,34 +30,40 @@ std::pair<int,Grid> read_next(const int N, std::ifstream& fin){
         std::cout << "File is not open!";
         exit(1);
     }
-    std::pair<int,Grid> snapshot;
+    LatticeType flattened[N * N]{};
+    Grid lattice(N,Row(N));
     //read temp value index i
     int T_i;
-    fin.read(reinterpret_cast<char*>(&T_i),sizeof(T_i));
+    fin.read(reinterpret_cast<char*>(&T_i),sizeof(int));
+    //Calculate quotient and remainder of N * N by 8
+    int qNN8 = N * N / 8;
+    int rNN8 = N * N % 8;
     //read snapshot
-    int qN8 = N / 8;
-    int rN8 = N % 8;
-    Grid lattice(N,Row(N));
-    for(int i = 0;i < N;++i){
-        for(int j = 0;j < qN8;++j){
-            unsigned char sto;
-            fin.read(reinterpret_cast<char*>(&sto),sizeof(sto));
-            for(int k = 0;k < 8;++k){
-                lattice[i][8 * j + k] = 2 * ((sto & (1 << k)) >> k) - 1;
-            }
+    for(int i = 0;i < N * N ;i += 8){
+        unsigned char sto;
+        fin.read(reinterpret_cast<char*>(&sto),sizeof(unsigned char));
+        for(int k = 0;k < 8;++k){
+            flattened[i + k] = 2 * ((sto & (1 << k)) >> k) - 1;
         }
-        if(rN8 > 0){
-            unsigned char sto;
-            fin.read(reinterpret_cast<char*>(&sto),sizeof(sto));
-            for(int k = 0;k < rN8;++k){
-                lattice[i][8 * qN8 + k] = 2 * ((sto & (1 << k)) >> k) - 1;
-            }
+    }
+    //Possible remainder block
+    if(rNN8 > 0){
+        unsigned char sto;
+        fin.read(reinterpret_cast<char*>(&sto),sizeof(unsigned char));
+        for(int k = 0;k < rNN8;++k){
+            flattened[8 * qNN8 + k] = 2 * ((sto & (1 << k)) >> k) - 1;
         }
     }
     //test if successfully read
     if(fin.eof()){
         std::cout << "No more snapshots to read!";
         exit(1);
+    }
+    //un-flatten array
+    for(int i = 0;i < N;++i){
+        for(int j = 0;j < N;++j){
+            lattice[i][j] = flattened[N * i + j];
+        }
     }
     return make_pair(T_i,lattice);
 }

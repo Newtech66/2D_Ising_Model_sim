@@ -32,7 +32,6 @@ int main(){
 
     Params sim_params;
     //Input data (part 1)
-    int N, t_equilibrium, snapshot_interval, snapshot_count;
     std::cout << "Input size of lattice (N): ";
     std::cin >> sim_params.N;
     std::cout << "Input equilibriation time: ";
@@ -54,6 +53,17 @@ int main(){
     char create_file;
     std::cout << "Create data file? (y/n): ";
     std::cin >> create_file;
+
+    std::ofstream fout;
+    if(create_file == 'y'){
+        //Create output file
+        std::string filename_noext;
+        std::cout << "Name of file to create (without .dat extension): ";
+        std::cin >> filename_noext;
+        std::string filename = filename_noext + ".dat";
+        fout.open(filename, std::ios_base::binary);
+        write_params(sim_params, fout);
+    }
 
     //Set up progress printing
     int pwidth = std::to_string(sim_params.n_T).length();
@@ -78,17 +88,6 @@ int main(){
         }
     }
 
-    std::ofstream fout;
-    if(create_file == 'y'){
-        //Create output file
-        std::string filename_noext;
-        std::cout << "Name of file to create (without .dat extension): ";
-        std::cin >> filename_noext;
-        std::string filename = filename_noext + ".dat";
-        fout.open(filename, std::ios_base::binary);
-        write_params(sim_params, fout);
-    }
-
     //Start timing
     double start = omp_get_wtime();
 
@@ -97,19 +96,16 @@ int main(){
     for(int T_i = 0;T_i < sim_params.n_T;++T_i){
         //Mersenne Twister engine seeded using system time
         std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-        // std::mt19937 rng(std::random_device());
-        //Calculate current temperature
-        float cur_T = sim_params.T_min + T_i * (sim_params.T_max - sim_params.T_min) / (sim_params.n_T - 1);
         
         //Allow lattice to equilibriate
-        for(int t_i = 0;t_i < t_equilibrium;++t_i){
-            mc_timestep(lattices[T_i], vexp, T_i, N, rng);
+        for(int t_i = 0;t_i < sim_params.t_eq;++t_i){
+            mc_timestep(lattices[T_i], vexp, T_i, sim_params.N, rng);
         }
 
         //Start taking snapshots
-        for(int snap = 0;snap < snapshot_count;snap++){
-            for(int t_i = 0;t_i < snapshot_interval;++t_i){
-                mc_timestep(lattices[T_i], vexp, T_i, N, rng);
+        for(int snap = 0;snap < sim_params.n_s;snap++){
+            for(int t_i = 0;t_i < sim_params.t_a;++t_i){
+                mc_timestep(lattices[T_i], vexp, T_i, sim_params.N, rng);
             }
             if(create_file == 'y'){
                 //Write snapshot to file
