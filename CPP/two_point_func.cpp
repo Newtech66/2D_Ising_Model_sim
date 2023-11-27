@@ -22,10 +22,6 @@ void analyze(const char* filename){
     std::cin >> seek_T_i;
     std::cout << "Calculating two point function for " << std::string(filename) << "..." << std::endl;
     Params p = read_params(fin);
-    //Set up progress printing
-    int pwidth = std::to_string(p.n_T).length();
-    int progress = 0;
-    std::cout << "\nProgress: " << std::setw(pwidth) << progress << '/' << p.n_s;
     //stores s[i]*s[i+j] in s12[j][i]
     std::vector<double> s12(r_max-r_min+1,0);
     //stores s[i] in s11[i]
@@ -47,12 +43,6 @@ void analyze(const char* filename){
             s12[j] += lattice[0][0]*lattice[0][j%p.N];
         }
         s1+=lattice[0][0];
-        //Update progress
-        #pragma omp critical
-        {
-            ++progress;
-            std::cout << "\rProgress: " << std::setw(pwidth) << progress << '/' << p.n_s;
-        }
     }
     //take average
     for(int j=0;j<r_max-r_min+1;j++){
@@ -74,7 +64,9 @@ void analyze(const char* filename){
     const auto millisecs = std::chrono::duration_cast<std::chrono::milliseconds>(time_taken - hrs - mins - secs);
     std::cout << "\nTime taken = " << hrs.count() << "h " << mins.count() << "m " << secs.count() << "s " << millisecs.count() << "ms";
     std::cout << std::endl;
-    std::string outfile_name = "two_point_func_" + std::to_string(p.N) + ".csv";
+    std::string filename_noext = std::string(filename);
+    filename_noext.erase(filename_noext.size()-4);
+    std::string outfile_name = "two_point_func_" + filename_noext + ".csv";
     std::ofstream fout(outfile_name);
     std::cout << "\nCalculated two point function data for " << std::string(filename);
     std::cout << "\nWriting data to " << outfile_name << "...";
