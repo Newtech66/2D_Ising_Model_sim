@@ -13,19 +13,9 @@ void analyze(const char* filename){
         std::cout << "Failed to open " << std::string(filename) << '\n';
         return;
     }
-    int r_min,r_max,seek_T_i;
-    std::cout << "Enter minimum radius: ";
-    std::cin >> r_min;
-    std::cout << "Enter maximum radius: ";
-    std::cin >> r_max;
-    std::cout << "Enter T_i: ";
-    std::cin >> seek_T_i;
-    std::cout << "Calculating two point function for " << std::string(filename) << "..." << std::endl;
+    std::cout << "Calculating Binder cumulant for " << std::string(filename) << "..." << std::endl;
     Params p = read_params(fin);
-    //stores s[i]*s[i+j] in s12[j][i]
-    std::vector<double> s12(r_max-r_min+1,0);
-    //stores s[i] in s11[i]
-    double s1=0;
+    std::map<int,double> two_tot, four_tot;
     //Start timing
     double start = omp_get_wtime();
     #pragma omp parallel for
@@ -38,21 +28,14 @@ void analyze(const char* filename){
             T_i=T;
             lattice=lat;
         }
-        if(T_i!=seek_T_i)  continue;   //only take T=1.2
-        for(int j=0;j<=r_max-r_min;j++){
-            s12[j] += lattice[0][0]*lattice[0][j%p.N];
+        double sum = 0.0;
+        for(int i = 0;i < p.N;++i){
+            for(int j = 0;j < p.N;++j){
+                sum += lattice[i][j];
+            }
         }
-        s1+=lattice[0][0];
-    }
-    //take average
-    for(int j=0;j<r_max-r_min+1;j++){
-        s12[j] /= p.n_s;
-    }
-    s1 /= p.n_s;
-    //compute G[j]
-    std::vector<double> G(r_max-r_min+1,0);
-    for(int j=0;j<r_max-r_min+1;j++){
-        G[j]+=s12[j]-s1*s1;
+        two_tot[T_i] += sum * sum;
+        four_tot[T_i] += sum * sum * sum * sum;
     }
     fin.close();
     //End timing and print time taken
@@ -66,15 +49,20 @@ void analyze(const char* filename){
     std::cout << std::endl;
     std::string filename_noext = std::string(filename);
     filename_noext.erase(filename_noext.size()-4);
-    std::string outfile_name = "two_point_func_" + filename_noext + ".csv";
+    std::string outfile_name = "binder_cumulant_" + filename_noext + ".csv";
     std::ofstream fout(outfile_name);
-    std::cout << "\nCalculated two point function data for " << std::string(filename);
+    std::cout << "Calculated Binder_cumulant data for " << std::string(filename);
     std::cout << "\nWriting data to " << outfile_name << "...";
-    fout << "r,G(r)\n";
-    for(int j=0;j<r_max-r_min+1;j++){
-        fout << j+r_min << ',' << G[j] << '\n';
+    fout << "T,Binder cumulant\n";
+    for(auto& [T_i,S]:two_tot)  S /= p.n_s;
+    for(auto& [T_i,S]:four_tot)  S /= p.n_s;
+    for(auto [T_i,S4]:four_tot){
+        float cur_T = p.T_min + T_i * (p.T_max - p.T_min) / (p.n_T - 1);
+        double S2 = two_tot[T_i];
+        fout << cur_T << ',' << S4 / (S2 * S2) << '\n';
     }
     std::cout << "\nFinished";
+    fout.close();
 }
 
 int main(int argc,char* argv[]){
